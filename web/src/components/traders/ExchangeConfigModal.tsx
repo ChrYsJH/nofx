@@ -909,6 +909,35 @@ export function ExchangeConfigModal({
                         {t('asterPrivateKeyDesc', language)}
                       </div>
                     </div>
+
+                    {/* Testnet Checkbox */}
+                    <div className="mt-3">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={testnet}
+                          onChange={(e) => setTestnet(e.target.checked)}
+                          className="form-checkbox h-4 w-4 rounded border-gray-600 bg-gray-700 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-gray-800"
+                          style={{
+                            accentColor: '#F0B90B',
+                            backgroundColor: '#0B0E11',
+                            borderColor: '#2B3139',
+                          }}
+                        />
+                        <span
+                          className="text-sm font-semibold"
+                          style={{ color: '#EAECEF' }}
+                        >
+                          {t('useTestnet', language)}
+                        </span>
+                      </label>
+                      <p
+                        className="text-xs mt-1 ml-6"
+                        style={{ color: '#848E9C' }}
+                      >
+                        {t('testnetDescription', language)}
+                      </p>
+                    </div>
                   </>
                 )}
 
