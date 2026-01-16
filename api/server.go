@@ -1139,6 +1139,7 @@ func (s *Server) handleSyncBalance(c *gin.Context) {
 			exchangeCfg.AsterUser,
 			exchangeCfg.AsterSigner,
 			string(exchangeCfg.AsterPrivateKey),
+			exchangeCfg.Testnet,
 		)
 	case "bybit":
 		tempTrader = trader.NewBybitTrader(
@@ -1291,6 +1292,7 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 			exchangeCfg.AsterUser,
 			exchangeCfg.AsterSigner,
 			string(exchangeCfg.AsterPrivateKey),
+			exchangeCfg.Testnet,
 		)
 	case "bybit":
 		tempTrader = trader.NewBybitTrader(
