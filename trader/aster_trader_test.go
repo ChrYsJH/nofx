@@ -277,7 +277,7 @@ func TestNewAsterTrader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			trader, err := NewAsterTrader(tt.user, tt.signer, tt.privateKeyHex)
+			trader, err := NewAsterTrader(tt.user, tt.signer, tt.privateKeyHex, false)
 
 			if tt.wantError {
 				assert.Error(t, err)

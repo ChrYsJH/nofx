@@ -594,6 +594,7 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 				exchangeCfg.AsterUser,
 				exchangeCfg.AsterSigner,
 				string(exchangeCfg.AsterPrivateKey),
+				exchangeCfg.Testnet,
 			)
 		case "bybit":
 			tempTrader = trader.NewBybitTrader(

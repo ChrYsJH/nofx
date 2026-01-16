@@ -53,6 +53,7 @@ type AutoTraderConfig struct {
 	AsterUser       string // Aster main wallet address
 	AsterSigner     string // Aster API wallet address
 	AsterPrivateKey string // Aster API wallet private key
+	AsterTestnet    bool   // Aster testnet
 
 	// LIGHTER configuration
 	LighterWalletAddr       string // LIGHTER wallet address (L1 wallet)
@@ -241,7 +242,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		}
 	case "aster":
 		logger.Infof("🏦 [%s] Using Aster trading", config.Name)
-		trader, err = NewAsterTrader(config.AsterUser, config.AsterSigner, config.AsterPrivateKey)
+		trader, err = NewAsterTrader(config.AsterUser, config.AsterSigner, config.AsterPrivateKey, config.AsterTestnet)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize Aster trader: %w", err)
 		}

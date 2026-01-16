@@ -697,6 +697,7 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
 		traderConfig.AsterPrivateKey = string(exchangeCfg.AsterPrivateKey)
+		traderConfig.AsterTestnet = exchangeCfg.Testnet
 	case "lighter":
 		traderConfig.LighterPrivateKey = string(exchangeCfg.LighterPrivateKey)
 		traderConfig.LighterWalletAddr = exchangeCfg.LighterWalletAddr

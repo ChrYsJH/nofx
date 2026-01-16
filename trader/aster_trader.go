@@ -51,7 +51,8 @@ type SymbolPrecision struct {
 // user: Main wallet address (login address)
 // signer: API wallet address (obtained from https://www.asterdex.com/en/api-wallet)
 // privateKey: API wallet private key (obtained from https://www.asterdex.com/en/api-wallet)
-func NewAsterTrader(user, signer, privateKeyHex string) (*AsterTrader, error) {
+// testnet: Whether to use testnet
+func NewAsterTrader(user, signer, privateKeyHex string, testnet bool) (*AsterTrader, error) {
 	// Parse private key
 	privKey, err := crypto.HexToECDSA(strings.TrimPrefix(privateKeyHex, "0x"))
 	if err != nil {
@@ -70,6 +71,11 @@ func NewAsterTrader(user, signer, privateKeyHex string) (*AsterTrader, error) {
 		client = res.GetResult()
 	}
 
+	baseURL := "https://fapi.asterdex.com"
+	if testnet {
+		baseURL = "https://testnet-fapi.asterdex.com" // AsterDex Testnet API
+	}
+
 	return &AsterTrader{
 		ctx:             context.Background(),
 		user:            user,
@@ -77,7 +83,7 @@ func NewAsterTrader(user, signer, privateKeyHex string) (*AsterTrader, error) {
 		privateKey:      privKey,
 		symbolPrecision: make(map[string]SymbolPrecision),
 		client:          client,
-		baseURL:         "https://fapi.asterdex.com",
+		baseURL:         baseURL,
 	}, nil
 }
 
