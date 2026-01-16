@@ -3289,6 +3289,7 @@ func (s *Server) handleGetSupportedModels(c *gin.Context) {
 		{"id": "gemini", "name": "Google Gemini", "provider": "gemini", "defaultModel": "gemini-3-pro-preview"},
 		{"id": "grok", "name": "Grok (xAI)", "provider": "grok", "defaultModel": "grok-3-latest"},
 		{"id": "kimi", "name": "Kimi (Moonshot)", "provider": "kimi", "defaultModel": "moonshot-v1-auto"},
+		{"id": "openrouter", "name": "OpenRouter", "provider": "openrouter", "defaultModel": "openai/gpt-5.2"},
 	}
 
 	c.JSON(http.StatusOK, supportedModels)

@@ -96,6 +96,11 @@ const AI_PROVIDER_CONFIG: Record<string, {
     apiUrl: 'https://platform.moonshot.ai/console/api-keys',
     apiName: 'Moonshot',
   },
+  openrouter: {
+    defaultModel: 'openai/gpt-5.2',
+    apiUrl: 'https://openrouter.ai/keys',
+    apiName: 'OpenRouter',
+  },
 }
 
 interface AITradersPageProps {

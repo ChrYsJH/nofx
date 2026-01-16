@@ -177,6 +177,11 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
 		logger.Infof("🤖 [%s] Using OpenAI", config.Name)
 
+	case "openrouter":
+		mcpClient = mcp.NewOpenRouterClient()
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+		logger.Infof("🤖 [%s] Using OpenRouter", config.Name)
+
 	case "qwen":
 		mcpClient = mcp.NewQwenClient()
 		apiKey := config.QwenKey
