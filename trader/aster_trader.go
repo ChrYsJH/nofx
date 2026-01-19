@@ -277,7 +277,12 @@ func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 	params["recvWindow"] = "50000"
 	params["timestamp"] = strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
 
-	// Normalize parameters to JSON string
+	// Add authentication parameters BEFORE signing
+	params["nonce"] = nonce
+	params["user"] = t.user
+	params["signer"] = t.signer
+
+	// Normalize parameters to JSON string (now includes user, signer, nonce)
 	jsonStr, err := t.normalizeAndStringify(params)
 	if err != nil {
 		return err
@@ -327,11 +332,8 @@ func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 	}
 	sig[64] += 27
 
-	// Add signature parameters
-	params["user"] = t.user
-	params["signer"] = t.signer
+	// Add signature to parameters
 	params["signature"] = "0x" + hex.EncodeToString(sig)
-	params["nonce"] = nonce
 
 	return nil
 }
