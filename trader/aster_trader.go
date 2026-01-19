@@ -272,7 +272,7 @@ func (t *AsterTrader) normalize(v interface{}) (interface{}, error) {
 	}
 }
 
-// sign Sign request parameters
+// sign Sign request parameters using EIP-712 standard
 func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 	// Add timestamp and receive window
 	params["recvWindow"] = "50000"
@@ -284,36 +284,40 @@ func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 		return err
 	}
 
-	// ABI encoding: (string, address, address, uint256)
-	addrUser := common.HexToAddress(t.user)
-	addrSigner := common.HexToAddress(t.signer)
-	nonceBig := new(big.Int).SetUint64(nonce)
+	// EIP-712 Domain Separator
+	// Domain TypeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+	domainTypeHash := crypto.Keccak256Hash([]byte(
+		"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"))
 
-	tString, _ := abi.NewType("string", "", nil)
-	tAddress, _ := abi.NewType("address", "", nil)
-	tUint256, _ := abi.NewType("uint256", "", nil)
+	nameHash := crypto.Keccak256Hash([]byte("AsterSignTransaction"))
+	versionHash := crypto.Keccak256Hash([]byte("1"))
+	chainId := big.NewInt(714)
+	verifyingContract := common.HexToAddress("0x0000000000000000000000000000000000000000")
 
-	arguments := abi.Arguments{
-		{Type: tString},
-		{Type: tAddress},
-		{Type: tAddress},
-		{Type: tUint256},
-	}
+	// Encode domain data
+	domainData := append(domainTypeHash.Bytes(), nameHash.Bytes()...)
+	domainData = append(domainData, versionHash.Bytes()...)
+	domainData = append(domainData, common.LeftPadBytes(chainId.Bytes(), 32)...)
+	domainData = append(domainData, common.LeftPadBytes(verifyingContract.Bytes(), 32)...)
+	domainSeparator := crypto.Keccak256Hash(domainData)
 
-	packed, err := arguments.Pack(jsonStr, addrUser, addrSigner, nonceBig)
-	if err != nil {
-		return fmt.Errorf("ABI encoding failed: %w", err)
-	}
+	// EIP-712 Message Hash
+	// Message TypeHash = keccak256("Message(string msg)")
+	messageTypeHash := crypto.Keccak256Hash([]byte("Message(string msg)"))
+	msgHash := crypto.Keccak256Hash([]byte(jsonStr))
 
-	// Keccak256 hash
-	hash := crypto.Keccak256(packed)
+	// Encode message data
+	messageData := append(messageTypeHash.Bytes(), msgHash.Bytes()...)
+	messageHash := crypto.Keccak256Hash(messageData)
 
-	// Ethereum signed message prefix
-	prefixedMsg := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(hash), hash)
-	msgHash := crypto.Keccak256Hash([]byte(prefixedMsg))
+	// Combine EIP-712 signature data
+	// 0x19 0x01 <domainSeparator> <messageHash>
+	finalData := append([]byte("\x19\x01"), domainSeparator.Bytes()...)
+	finalData = append(finalData, messageHash.Bytes()...)
+	finalHash := crypto.Keccak256Hash(finalData)
 
 	// ECDSA signature
-	sig, err := crypto.Sign(msgHash.Bytes(), t.privateKey)
+	sig, err := crypto.Sign(finalHash.Bytes(), t.privateKey)
 	if err != nil {
 		return fmt.Errorf("signature failed: %w", err)
 	}
