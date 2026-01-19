@@ -271,6 +271,25 @@ func (t *AsterTrader) normalize(v interface{}) (interface{}, error) {
 	}
 }
 
+// toQueryString Convert parameters to URL query string format (sorted by key)
+// Example: "key1=value1&key2=value2&key3=value3"
+func (t *AsterTrader) toQueryString(params map[string]interface{}) string {
+	// Get sorted keys
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Build query string
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		v := params[k]
+		pairs = append(pairs, fmt.Sprintf("%s=%v", k, v))
+	}
+	return strings.Join(pairs, "&")
+}
+
 // sign Sign request parameters using EIP-712 standard
 func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 	// Add timestamp and receive window
@@ -282,11 +301,11 @@ func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 	params["user"] = t.user
 	params["signer"] = t.signer
 
-	// Normalize parameters to JSON string (now includes user, signer, nonce)
-	jsonStr, err := t.normalizeAndStringify(params)
-	if err != nil {
-		return err
-	}
+	// Convert parameters to query string format (as required by AsterDex API)
+	queryStr := t.toQueryString(params)
+
+	// Log the message being signed for debugging
+	logger.Info("🔐 Signing message: %s", queryStr)
 
 	// EIP-712 Domain Separator
 	// Domain TypeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
@@ -308,7 +327,7 @@ func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 	// EIP-712 Message Hash
 	// Message TypeHash = keccak256("Message(string msg)")
 	messageTypeHash := crypto.Keccak256Hash([]byte("Message(string msg)"))
-	msgHash := crypto.Keccak256Hash([]byte(jsonStr))
+	msgHash := crypto.Keccak256Hash([]byte(queryStr))
 
 	// Encode message data
 	messageData := append(messageTypeHash.Bytes(), msgHash.Bytes()...)
