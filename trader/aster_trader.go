@@ -73,7 +73,7 @@ func NewAsterTrader(user, signer, privateKeyHex string, testnet bool) (*AsterTra
 
 	baseURL := "https://fapi.asterdex.com"
 	if testnet {
-		baseURL = "https://testnet-fapi.asterdex.com" // AsterDex Testnet API
+		baseURL = "https://fapi.asterdex-testnet.com" // AsterDex Testnet API
 	}
 
 	return &AsterTrader{
