@@ -305,7 +305,7 @@ func (t *AsterTrader) sign(params map[string]interface{}, nonce uint64) error {
 	queryStr := t.toQueryString(params)
 
 	// Log the message being signed for debugging
-	logger.Info("🔐 Signing message: %s", queryStr)
+	logger.Infof("🔐 Signing message: %s", queryStr)
 
 	// EIP-712 Domain Separator
 	// Domain TypeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")

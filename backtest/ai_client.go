@@ -71,6 +71,13 @@ func configureMCPClient(cfg BacktestConfig, base mcp.AIClient) (mcp.AIClient, er
 		oaiC := mcp.NewOpenAIClientWithOptions()
 		oaiC.(*mcp.OpenAIClient).SetAPIKey(cfg.AICfg.APIKey, cfg.AICfg.BaseURL, cfg.AICfg.Model)
 		return oaiC, nil
+	case "openrouter":
+		if cfg.AICfg.APIKey == "" {
+			return nil, fmt.Errorf("openrouter provider requires api key")
+		}
+		orC := mcp.NewOpenRouterClientWithOptions()
+		orC.(*mcp.OpenRouterClient).SetAPIKey(cfg.AICfg.APIKey, cfg.AICfg.BaseURL, cfg.AICfg.Model)
+		return orC, nil
 	case "custom":
 		if cfg.AICfg.BaseURL == "" || cfg.AICfg.APIKey == "" || cfg.AICfg.Model == "" {
 			return nil, fmt.Errorf("custom provider requires base_url, api key and model")
@@ -121,6 +128,11 @@ func cloneBaseClient(base mcp.AIClient) *mcp.Client {
 			return &cp
 		}
 	case *mcp.OpenAIClient:
+		if c != nil && c.Client != nil {
+			cp := *c.Client
+			return &cp
+		}
+	case *mcp.OpenRouterClient:
 		if c != nil && c.Client != nil {
 			cp := *c.Client
 			return &cp
