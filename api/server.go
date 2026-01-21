@@ -360,6 +360,25 @@ func isPrivateIP(ip net.IP) bool {
 	return false
 }
 
+// MASKED_SECRET_PLACEHOLDER 掩码占位符，用于检测用户是否修改了敏感字段
+// 如果用户提交的值等于此占位符，说明用户没有修改，保留数据库中的原值
+const MASKED_SECRET_PLACEHOLDER = "••••••••"
+
+// maskSecret 掩码敏感信息，用于安全展示
+// 如果字符串为空返回空，否则返回掩码占位符
+func maskSecret(secret string) string {
+	if secret == "" {
+		return ""
+	}
+	return MASKED_SECRET_PLACEHOLDER
+}
+
+// isMaskedOrEmpty 检查值是否为掩码占位符或空值
+// 返回 true 表示不应更新数据库中的值
+func isMaskedOrEmpty(value string) bool {
+	return value == "" || value == MASKED_SECRET_PLACEHOLDER
+}
+
 // getTraderFromQuery Get trader from query parameter
 func (s *Server) getTraderFromQuery(c *gin.Context) (*manager.TraderManager, string, error) {
 	userID := c.GetString("user_id")
@@ -420,12 +439,13 @@ type ModelConfig struct {
 	CustomAPIURL string `json:"customApiUrl,omitempty"`
 }
 
-// SafeModelConfig Safe model configuration structure (does not contain sensitive information)
+// SafeModelConfig Safe model configuration structure (masked sensitive information for display)
 type SafeModelConfig struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
 	Provider        string `json:"provider"`
 	Enabled         bool   `json:"enabled"`
+	APIKey          string `json:"apiKey"`          // 掩码后的 API Key，用于前端显示
 	CustomAPIURL    string `json:"customApiUrl"`    // Custom API URL (usually not sensitive)
 	CustomModelName string `json:"customModelName"` // Custom model name (not sensitive)
 }
@@ -440,19 +460,27 @@ type ExchangeConfig struct {
 	Testnet   bool   `json:"testnet,omitempty"`
 }
 
-// SafeExchangeConfig Safe exchange configuration structure (does not contain sensitive information)
+// SafeExchangeConfig Safe exchange configuration structure (masked sensitive information for display)
 type SafeExchangeConfig struct {
-	ID                    string `json:"id"`            // UUID
-	ExchangeType          string `json:"exchange_type"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter"
-	AccountName           string `json:"account_name"`  // User-defined account name
-	Name                  string `json:"name"`          // Display name
-	Type                  string `json:"type"`          // "cex" or "dex"
-	Enabled               bool   `json:"enabled"`
-	Testnet               bool   `json:"testnet,omitempty"`
-	HyperliquidWalletAddr string `json:"hyperliquidWalletAddr"` // Hyperliquid wallet address (not sensitive)
-	AsterUser             string `json:"asterUser"`             // Aster username (not sensitive)
-	AsterSigner           string `json:"asterSigner"`           // Aster signer (not sensitive)
-	LighterWalletAddr     string `json:"lighterWalletAddr"`     // LIGHTER wallet address (not sensitive)
+	ID                      string `json:"id"`            // UUID
+	ExchangeType            string `json:"exchange_type"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter"
+	AccountName             string `json:"account_name"`  // User-defined account name
+	Name                    string `json:"name"`          // Display name
+	Type                    string `json:"type"`          // "cex" or "dex"
+	Enabled                 bool   `json:"enabled"`
+	Testnet                 bool   `json:"testnet,omitempty"`
+	// 掩码后的敏感字段，用于前端显示（如果用户未修改则保留原值）
+	APIKey                  string `json:"apiKey"`                  // 掩码后的 API Key
+	SecretKey               string `json:"secretKey"`               // 掩码后的 Secret Key
+	Passphrase              string `json:"passphrase"`              // 掩码后的 Passphrase (OKX/Bitget)
+	HyperliquidWalletAddr   string `json:"hyperliquidWalletAddr"`   // Hyperliquid 钱包地址 (not sensitive)
+	HyperliquidPrivateKey   string `json:"hyperliquidPrivateKey"`   // 掩码后的 Hyperliquid 私钥
+	AsterUser               string `json:"asterUser"`               // Aster 用户名 (not sensitive)
+	AsterSigner             string `json:"asterSigner"`             // Aster Signer (not sensitive)
+	AsterPrivateKey         string `json:"asterPrivateKey"`         // 掩码后的 Aster 私钥
+	LighterWalletAddr       string `json:"lighterWalletAddr"`       // LIGHTER 钱包地址 (not sensitive)
+	LighterAPIKeyPrivateKey string `json:"lighterApiKeyPrivateKey"` // 掩码后的 Lighter API Key 私钥
+	LighterAPIKeyIndex      int    `json:"lighterApiKeyIndex"`      // Lighter API Key Index
 }
 
 type UpdateModelConfigRequest struct {
@@ -1632,7 +1660,7 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 
 	logger.Infof("✅ Found %d AI model configs", len(models))
 
-	// Convert to safe response structure, remove sensitive information
+	// Convert to safe response structure, mask sensitive information
 	safeModels := make([]SafeModelConfig, len(models))
 	for i, model := range models {
 		safeModels[i] = SafeModelConfig{
@@ -1640,6 +1668,7 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 			Name:            model.Name,
 			Provider:        model.Provider,
 			Enabled:         model.Enabled,
+			APIKey:          maskSecret(string(model.APIKey)), // 返回掩码后的 API Key
 			CustomAPIURL:    model.CustomAPIURL,
 			CustomModelName: model.CustomModelName,
 		}
@@ -1710,7 +1739,13 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 
 	// Update each model's configuration
 	for modelID, modelData := range req.Models {
-		err := s.store.AIModel().Update(userID, modelID, modelData.Enabled, modelData.APIKey, modelData.CustomAPIURL, modelData.CustomModelName)
+		// 如果 API Key 是掩码占位符或空值，传递空字符串给 store 层
+		// store 层会检测空字符串并保留数据库中的原值
+		apiKeyToUpdate := modelData.APIKey
+		if isMaskedOrEmpty(apiKeyToUpdate) {
+			apiKeyToUpdate = "" // 传递空字符串，store 层会保留原值
+		}
+		err := s.store.AIModel().Update(userID, modelID, modelData.Enabled, apiKeyToUpdate, modelData.CustomAPIURL, modelData.CustomModelName)
 		if err != nil {
 			SafeInternalError(c, fmt.Sprintf("Update model %s", modelID), err)
 			return
@@ -1747,21 +1782,29 @@ func (s *Server) handleGetExchangeConfigs(c *gin.Context) {
 
 	logger.Infof("✅ Found %d exchange configs", len(exchanges))
 
-	// Convert to safe response structure, remove sensitive information
+	// Convert to safe response structure, mask sensitive information
 	safeExchanges := make([]SafeExchangeConfig, len(exchanges))
 	for i, exchange := range exchanges {
 		safeExchanges[i] = SafeExchangeConfig{
-			ID:                    exchange.ID,
-			ExchangeType:          exchange.ExchangeType,
-			AccountName:           exchange.AccountName,
-			Name:                  exchange.Name,
-			Type:                  exchange.Type,
-			Enabled:               exchange.Enabled,
-			Testnet:               exchange.Testnet,
-			HyperliquidWalletAddr: exchange.HyperliquidWalletAddr,
-			AsterUser:             exchange.AsterUser,
-			AsterSigner:           exchange.AsterSigner,
-			LighterWalletAddr:     exchange.LighterWalletAddr,
+			ID:                      exchange.ID,
+			ExchangeType:            exchange.ExchangeType,
+			AccountName:             exchange.AccountName,
+			Name:                    exchange.Name,
+			Type:                    exchange.Type,
+			Enabled:                 exchange.Enabled,
+			Testnet:                 exchange.Testnet,
+			// 返回掩码后的敏感字段
+			APIKey:                  maskSecret(string(exchange.APIKey)),
+			SecretKey:               maskSecret(string(exchange.SecretKey)),
+			Passphrase:              maskSecret(string(exchange.Passphrase)),
+			HyperliquidWalletAddr:   exchange.HyperliquidWalletAddr,
+			HyperliquidPrivateKey:   maskSecret(string(exchange.APIKey)), // Hyperliquid 使用 APIKey 存储私钥
+			AsterUser:               exchange.AsterUser,
+			AsterSigner:             exchange.AsterSigner,
+			AsterPrivateKey:         maskSecret(string(exchange.AsterPrivateKey)),
+			LighterWalletAddr:       exchange.LighterWalletAddr,
+			LighterAPIKeyPrivateKey: maskSecret(string(exchange.LighterAPIKeyPrivateKey)),
+			LighterAPIKeyIndex:      exchange.LighterAPIKeyIndex,
 		}
 	}
 
@@ -1830,7 +1873,41 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 
 	// Update each exchange's configuration
 	for exchangeID, exchangeData := range req.Exchanges {
-		err := s.store.Exchange().Update(userID, exchangeID, exchangeData.Enabled, exchangeData.APIKey, exchangeData.SecretKey, exchangeData.Passphrase, exchangeData.Testnet, exchangeData.HyperliquidWalletAddr, exchangeData.AsterUser, exchangeData.AsterSigner, exchangeData.AsterPrivateKey, exchangeData.LighterWalletAddr, exchangeData.LighterPrivateKey, exchangeData.LighterAPIKeyPrivateKey, exchangeData.LighterAPIKeyIndex)
+		// 如果敏感字段是掩码占位符或空值，传递空字符串给 store 层
+		// store 层会检测空字符串并保留数据库中的原值
+		apiKeyToUpdate := exchangeData.APIKey
+		if isMaskedOrEmpty(apiKeyToUpdate) {
+			apiKeyToUpdate = ""
+		}
+		secretKeyToUpdate := exchangeData.SecretKey
+		if isMaskedOrEmpty(secretKeyToUpdate) {
+			secretKeyToUpdate = ""
+		}
+		passphraseToUpdate := exchangeData.Passphrase
+		if isMaskedOrEmpty(passphraseToUpdate) {
+			passphraseToUpdate = ""
+		}
+		asterPrivateKeyToUpdate := exchangeData.AsterPrivateKey
+		if isMaskedOrEmpty(asterPrivateKeyToUpdate) {
+			asterPrivateKeyToUpdate = ""
+		}
+		lighterPrivateKeyToUpdate := exchangeData.LighterPrivateKey
+		if isMaskedOrEmpty(lighterPrivateKeyToUpdate) {
+			lighterPrivateKeyToUpdate = ""
+		}
+		lighterAPIKeyPrivateKeyToUpdate := exchangeData.LighterAPIKeyPrivateKey
+		if isMaskedOrEmpty(lighterAPIKeyPrivateKeyToUpdate) {
+			lighterAPIKeyPrivateKeyToUpdate = ""
+		}
+
+		err := s.store.Exchange().Update(
+			userID, exchangeID, exchangeData.Enabled,
+			apiKeyToUpdate, secretKeyToUpdate, passphraseToUpdate,
+			exchangeData.Testnet, exchangeData.HyperliquidWalletAddr,
+			exchangeData.AsterUser, exchangeData.AsterSigner, asterPrivateKeyToUpdate,
+			exchangeData.LighterWalletAddr, lighterPrivateKeyToUpdate, lighterAPIKeyPrivateKeyToUpdate,
+			exchangeData.LighterAPIKeyIndex,
+		)
 		if err != nil {
 			SafeInternalError(c, fmt.Sprintf("Update exchange %s", exchangeID), err)
 			return

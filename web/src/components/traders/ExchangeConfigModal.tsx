@@ -132,25 +132,26 @@ export function ExchangeConfigModal({
   }
 
   // 如果是编辑现有交易所，初始化表单数据
+  // 后端现在返回掩码后的敏感字段 (如 "••••••••")，用户如果不修改则保留原值
   useEffect(() => {
     if (editingExchangeId && selectedExchange) {
       setAccountName(selectedExchange.account_name || '')
       setApiKey(selectedExchange.apiKey || '')
       setSecretKey(selectedExchange.secretKey || '')
-      setPassphrase('') // Don't load existing passphrase for security
+      setPassphrase(selectedExchange.passphrase || '') // 现在从后端加载掩码值
       setTestnet(selectedExchange.testnet || false)
 
       // Aster 字段
       setAsterUser(selectedExchange.asterUser || '')
       setAsterSigner(selectedExchange.asterSigner || '')
-      setAsterPrivateKey('') // Don't load existing private key for security
+      setAsterPrivateKey(selectedExchange.asterPrivateKey || '') // 现在从后端加载掩码值
 
       // Hyperliquid 字段
       setHyperliquidWalletAddr(selectedExchange.hyperliquidWalletAddr || '')
 
       // LIGHTER 字段
       setLighterWalletAddr(selectedExchange.lighterWalletAddr || '')
-      setLighterApiKeyPrivateKey('') // Don't load existing API key for security
+      setLighterApiKeyPrivateKey(selectedExchange.lighterApiKeyPrivateKey || '') // 现在从后端加载掩码值
       setLighterApiKeyIndex(selectedExchange.lighterApiKeyIndex || 0)
     }
   }, [editingExchangeId, selectedExchange])
