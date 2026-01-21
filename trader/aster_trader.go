@@ -461,7 +461,7 @@ func (t *AsterTrader) doRequest(method, endpoint string, params map[string]inter
 	}
 }
 
-// GetBalance 获取账户余额
+// GetBalance 获取账户 USDT 余额
 func (t *AsterTrader) GetBalance() (map[string]interface{}, error) {
 	params := make(map[string]interface{})
 	body, err := t.request("GET", "/fapi/v3/balance", params)
@@ -474,99 +474,38 @@ func (t *AsterTrader) GetBalance() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	// 调试: 记录 API 返回的所有资产信息, 便于排查数据结构
-	logger.Infof("📊 Aster /fapi/v3/balance returned %d asset records:", len(balances))
-	for _, bal := range balances {
-		asset, _ := bal["asset"].(string)
-		balance, _ := bal["balance"].(string)
-		availBal, _ := bal["availableBalance"].(string)
-		crossWalBal, _ := bal["crossWalletBalance"].(string)
-		marginAvail, _ := bal["marginAvailable"].(bool)
-		logger.Infof("  💰 Asset: %s | balance: %s | availableBalance: %s | crossWalletBalance: %s | marginAvailable: %v",
-			asset, balance, availBal, crossWalBal, marginAvail)
-	}
-
-	usdtBalance := 0.0        // 纯 USDT 钱包余额
-	usdtAvailableBalance := 0.0 // USDT 可用余额
-	usdtCrossUnPnl := 0.0     // USDT 未实现盈亏
-	foundUSDT := false
-
+	// 遍历查找 USDT 资产
 	for _, bal := range balances {
 		asset, ok := bal["asset"].(string)
-		if !ok {
+		if !ok || asset != "USDT" {
 			continue
 		}
 
-		if asset == "USDT" {
-			foundUSDT = true
-
-			// 使用 "balance" 字段 - 这是纯钱包余额, 不受多资产模式影响
-			if balStr, ok := bal["balance"].(string); ok {
-				usdtBalance, _ = strconv.ParseFloat(balStr, 64)
-			}
-			// 同时获取可用余额作为参考
-			if availStr, ok := bal["availableBalance"].(string); ok {
-				usdtAvailableBalance, _ = strconv.ParseFloat(availStr, 64)
-			}
-			// 获取未实现盈亏
-			if unpnlStr, ok := bal["crossUnPnl"].(string); ok {
-				usdtCrossUnPnl, _ = strconv.ParseFloat(unpnlStr, 64)
-			}
-
-			logger.Infof("✅ USDT balance found: balance=%f, availableBalance=%f, crossUnPnl=%f",
-				usdtBalance, usdtAvailableBalance, usdtCrossUnPnl)
-			break
+		// 解析 USDT 余额字段
+		var walletBalance, availableBalance, crossUnPnl float64
+		if s, ok := bal["balance"].(string); ok {
+			walletBalance, _ = strconv.ParseFloat(s, 64)
 		}
-	}
+		if s, ok := bal["availableBalance"].(string); ok {
+			availableBalance, _ = strconv.ParseFloat(s, 64)
+		}
+		if s, ok := bal["crossUnPnl"].(string); ok {
+			crossUnPnl, _ = strconv.ParseFloat(s, 64)
+		}
 
-	if !foundUSDT {
-		logger.Infof("⚠️  USDT asset record not found in balance response!")
-	}
-
-	// Get positions to calculate margin used and real unrealized PnL
-	positions, err := t.GetPositions()
-	if err != nil {
-		logger.Infof("⚠️  Failed to get position information: %v", err)
 		return map[string]interface{}{
-			"totalWalletBalance":    usdtBalance,
-			"availableBalance":      usdtAvailableBalance,
-			"totalUnrealizedProfit": usdtCrossUnPnl,
+			"totalWalletBalance":    walletBalance,
+			"availableBalance":      availableBalance,
+			"totalUnrealizedProfit": crossUnPnl,
 		}, nil
 	}
 
-	// 从仓位计算未实现盈亏，避免受多资产模式影响
-	totalMarginUsed := 0.0
-	realUnrealizedPnl := 0.0
-	for _, pos := range positions {
-		markPrice := pos["markPrice"].(float64)
-		quantity := pos["positionAmt"].(float64)
-		if quantity < 0 {
-			quantity = -quantity
-		}
-		unrealizedPnl := pos["unRealizedProfit"].(float64)
-		realUnrealizedPnl += unrealizedPnl
-
-		leverage := 10
-		if lev, ok := pos["leverage"].(float64); ok {
-			leverage = int(lev)
-		}
-		marginUsed := (quantity * markPrice) / float64(leverage)
-		totalMarginUsed += marginUsed
-	}
-
-	// 直接使用 USDT balance 字段作为钱包余额
-	totalWalletBalance := usdtBalance
-
-	// 可用余额 = 钱包余额 + 未实现盈亏 - 已用保证金
-	calculatedAvailable := totalWalletBalance + realUnrealizedPnl - totalMarginUsed
-
-	logger.Infof("📈 Aster balance calculation: walletBalance=%.2f, unrealizedPnL=%.2f, marginUsed=%.2f, calculatedAvailable=%.2f, apiAvailable=%.2f",
-		totalWalletBalance, realUnrealizedPnl, totalMarginUsed, calculatedAvailable, usdtAvailableBalance)
-
+	// 未找到 USDT 资产
+	logger.Warnf("⚠️ USDT asset not found in balance response")
 	return map[string]interface{}{
-		"totalWalletBalance":    totalWalletBalance,   // 纯 USDT 钱包余额 (不含未实现盈亏)
-		"availableBalance":      calculatedAvailable,  // 计算得出的可用余额
-		"totalUnrealizedProfit": realUnrealizedPnl,    // 从仓位累计的未实现盈亏
+		"totalWalletBalance":    0.0,
+		"availableBalance":      0.0,
+		"totalUnrealizedProfit": 0.0,
 	}, nil
 }
 
