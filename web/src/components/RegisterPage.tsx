@@ -4,7 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { t } from '../i18n/translations'
 import { getSystemConfig } from '../lib/config'
 import { toast } from 'sonner'
-import { copyWithToast } from '../lib/clipboard'
+// import { copyWithToast } from '../lib/clipboard'
 import { Eye, EyeOff } from 'lucide-react'
 import { DeepVoidBackground } from './DeepVoidBackground'
 // import { Input } from './ui/input' // Removed unused import
@@ -14,8 +14,8 @@ import { WhitelistFullPage } from './WhitelistFullPage'
 
 export function RegisterPage() {
   const { language } = useLanguage()
-  const { register, completeRegistration } = useAuth()
-  const [step, setStep] = useState<'register' | 'setup-otp' | 'verify-otp' | 'whitelist-full'>(
+  const { register } = useAuth()
+  const [step, setStep] = useState<'register' | 'whitelist-full'>(
     'register'
   )
   const [email, setEmail] = useState('')
@@ -24,10 +24,10 @@ export function RegisterPage() {
   const [betaCode, setBetaCode] = useState('')
   const [betaMode, setBetaMode] = useState(false)
   const [registrationEnabled, setRegistrationEnabled] = useState(true)
-  const [otpCode, setOtpCode] = useState('')
-  const [userID, setUserID] = useState('')
-  const [otpSecret, setOtpSecret] = useState('')
-  const [qrCodeURL, setQrCodeURL] = useState('')
+  // const [otpCode, setOtpCode] = useState('')
+  // const [userID, setUserID] = useState('')
+  // const [otpSecret, setOtpSecret] = useState('')
+  // const [qrCodeURL, setQrCodeURL] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [passwordValid, setPasswordValid] = useState(false)
@@ -76,22 +76,24 @@ export function RegisterPage() {
     try {
       const result = await register(email, password, betaCode.trim() || undefined)
 
-      // Helper to check for whitelist errors
-      const isWhitelistError = (msg: string) => {
-        const lowerMsg = msg.toLowerCase()
-        return lowerMsg.includes('whitelist') ||
-          lowerMsg.includes('capacity') ||
-          lowerMsg.includes('limit') ||
-          lowerMsg.includes('permission denied') ||
-          lowerMsg.includes('not on whitelist')
-      }
+      // 简化版注册：AuthContext 已经处理了登录状态和跳转
+      if (!result.success) {
+        // Helper to check for whitelist errors
+        const isWhitelistError = (msg: string) => {
+          const lowerMsg = msg.toLowerCase()
+          return lowerMsg.includes('whitelist') ||
+            lowerMsg.includes('capacity') ||
+            lowerMsg.includes('limit') ||
+            lowerMsg.includes('permission denied') ||
+            lowerMsg.includes('not on whitelist')
+        }
 
-      if (result.success && result.userID) {
-        setUserID(result.userID)
-        setOtpSecret(result.otpSecret || '')
-        setQrCodeURL(result.qrCodeURL || '')
-        setStep('setup-otp')
-      } else {
+        // if (result.success && result.userID) {
+        //   setUserID(result.userID)
+        //   setOtpSecret(result.otpSecret || '')
+        //   setQrCodeURL(result.qrCodeURL || '')
+        //   setStep('setup-otp')
+        // } else {
         // Check for whitelist/capacity limit error
         const msg = result.message || t('registrationFailed', language)
         if (isWhitelistError(msg)) {
@@ -101,6 +103,7 @@ export function RegisterPage() {
         setError(msg)
         toast.error(msg)
       }
+      // 注册成功，AuthContext 已自动处理跳转
     } catch (e) {
       console.error('Registration error:', e)
       const errorMsg = e instanceof Error ? e.message : 'Registration failed due to server error'
@@ -123,30 +126,30 @@ export function RegisterPage() {
     }
   }
 
-  const handleSetupComplete = () => {
-    setStep('verify-otp')
-  }
+  // const handleSetupComplete = () => {
+  //   setStep('verify-otp')
+  // }
 
-  const handleOTPVerify = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+  // const handleOTPVerify = async (e: React.FormEvent) => {
+  //   e.preventDefault()
+  //   setError('')
+  //   setLoading(true)
 
-    const result = await completeRegistration(userID, otpCode)
+  //   const result = await completeRegistration(userID, otpCode)
 
-    if (!result.success) {
-      const msg = result.message || t('registrationFailed', language)
-      setError(msg)
-      toast.error(msg)
-    }
-    // 成功的话AuthContext会自动处理登录状态
+  //   if (!result.success) {
+  //     const msg = result.message || t('registrationFailed', language)
+  //     setError(msg)
+  //     toast.error(msg)
+  //   }
+  //   // 成功的话AuthContext会自动处理登录状态
 
-    setLoading(false)
-  }
+  //   setLoading(false)
+  // }
 
-  const copyToClipboard = (text: string) => {
-    copyWithToast(text)
-  }
+  // const copyToClipboard = (text: string) => {
+  //   copyWithToast(text)
+  // }
 
   return (
     <DeepVoidBackground className="min-h-screen flex items-center justify-center py-12 font-mono" disableAnimation>
@@ -223,11 +226,11 @@ export function RegisterPage() {
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-zinc-500 mb-1.5 ml-1 font-bold">{t('email', language)}</label>
                   <input
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-black/50 border border-zinc-700 rounded px-4 py-3 text-sm focus:border-nofx-gold focus:ring-1 focus:ring-nofx-gold/50 outline-none transition-all placeholder-zinc-800 text-white font-mono"
-                    placeholder="user@nofx.os"
+                    placeholder="username"
                     required
                   />
                 </div>
@@ -283,16 +286,12 @@ export function RegisterPage() {
                   </div>
                   <div className="text-xs font-mono text-zinc-400">
                     <PasswordChecklist
-                      rules={['minLength', 'capital', 'lowercase', 'number', 'specialChar', 'match']}
-                      minLength={8}
+                      rules={['minLength', 'match']}
+                      minLength={4}
                       value={password}
                       valueAgain={confirmPassword}
                       messages={{
-                        minLength: t('passwordRuleMinLength', language),
-                        capital: t('passwordRuleUppercase', language),
-                        lowercase: t('passwordRuleLowercase', language),
-                        number: t('passwordRuleNumber', language),
-                        specialChar: t('passwordRuleSpecial', language),
+                        minLength: language === 'zh' ? '至少4位' : 'At least 4 characters',
                         match: t('passwordRuleMatch', language),
                       }}
                       className="grid grid-cols-2 gap-x-4 gap-y-1"
@@ -341,121 +340,6 @@ export function RegisterPage() {
               </form>
             )}
 
-            {step === 'setup-otp' && (
-              <div className="space-y-6">
-                <div className="text-center bg-zinc-900/50 p-4 rounded border border-zinc-800">
-                  <div className="text-xs font-mono text-zinc-400 mb-2">SCAN_QR_CODE_SEQUENCE</div>
-                  {qrCodeURL ? (
-                    <div className="bg-white p-2 rounded inline-block shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`otpauth://totp/NoFX:${email}?secret=${otpSecret}&issuer=NoFX`)}`}
-                        alt="QR Code"
-                        className="w-32 h-32"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-32 h-32 bg-zinc-800 animate-pulse rounded inline-block"></div>
-                  )}
-                  <div className="mt-4">
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Backup Secret Key</p>
-                    <div className="flex items-center gap-2 justify-center bg-black/50 p-2 rounded border border-zinc-700/50 max-w-[200px] mx-auto">
-                      <code className="text-xs font-mono text-nofx-gold">{otpSecret}</code>
-                      <button
-                        onClick={() => copyToClipboard(otpSecret)}
-                        className="text-zinc-500 hover:text-white transition-colors"
-                      >
-                        <span className="text-[10px] uppercase border border-zinc-700 px-1 rounded">Copy</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4 font-mono text-xs text-zinc-400 bg-black/20 p-4 rounded border border-zinc-800/50">
-                  <div className="flex gap-3 items-start">
-                    <span className="text-nofx-gold font-bold mt-0.5">01</span>
-                    <div>
-                      <p className="font-bold text-white mb-1">Install Authenticator App</p>
-                      <p className="mb-2">We highly recommend <span className="text-nofx-gold">Google Authenticator</span> for compatibility.</p>
-                      <div className="flex gap-2">
-                        <span className="px-1.5 py-0.5 bg-zinc-800 rounded text-[10px] text-zinc-300 border border-zinc-700">iOS</span>
-                        <span className="px-1.5 py-0.5 bg-zinc-800 rounded text-[10px] text-zinc-300 border border-zinc-700">Android</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="w-full h-px bg-zinc-800/50"></div>
-
-                  <div className="flex gap-3 items-start">
-                    <span className="text-nofx-gold font-bold mt-0.5">02</span>
-                    <div>
-                      <p className="font-bold text-white mb-1">Scan QR Code</p>
-                      <p>Open Google Authenticator, tap the <span className="text-white">+</span> button, and scan the code above.</p>
-                      <p className="text-[10px] text-zinc-500 mt-1 italic">Protocol: Time-Based OTP (TOTP)</p>
-                    </div>
-                  </div>
-
-                  <div className="w-full h-px bg-zinc-800/50"></div>
-
-                  <div className="flex gap-3 items-start">
-                    <span className="text-nofx-gold font-bold mt-0.5">03</span>
-                    <div>
-                      <p className="font-bold text-white mb-1">Verify Token</p>
-                      <p>Enter the 6-digit code generated by the app.</p>
-                      <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-[10px] text-yellow-500/80 flex gap-2 items-start">
-                        <span className="mt-px">⚠️</span>
-                        <span>Stuck? Ensure your phone's time is set to "Automatic". Time drift causes codes to fail.</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleSetupComplete}
-                  className="w-full bg-nofx-gold text-black font-bold py-3 px-4 rounded text-sm tracking-wide uppercase hover:bg-yellow-400 transition-colors font-mono shadow-lg"
-                >
-                  PROCEED TO VERIFICATION
-                </button>
-              </div>
-            )}
-
-            {step === 'verify-otp' && (
-              <form onSubmit={handleOTPVerify} className="space-y-6">
-                <div className="text-center">
-                  <p className="text-xs text-zinc-400 font-mono mb-6">
-                    ENTER 6-DIGIT SECURITY TOKEN TO FINALIZE ONBOARDING
-                  </p>
-                </div>
-
-                <div>
-                  <input
-                    type="text"
-                    value={otpCode}
-                    onChange={(e) =>
-                      setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))
-                    }
-                    className="w-full bg-black border border-zinc-700 rounded px-4 py-4 text-center text-3xl tracking-[0.5em] font-mono text-white focus:border-nofx-gold focus:ring-1 focus:ring-nofx-gold/50 outline-none transition-all placeholder-zinc-800"
-                    placeholder="000000"
-                    maxLength={6}
-                    required
-                    autoFocus
-                  />
-                </div>
-
-                {error && (
-                  <div className="text-xs bg-red-500/10 border border-red-500/30 text-red-500 px-3 py-2 rounded font-mono text-center">
-                    [VERIFICATION_FAILED]: {error}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading || otpCode.length !== 6}
-                  className="w-full bg-nofx-gold text-black font-bold py-3 px-4 rounded text-sm tracking-wide uppercase hover:bg-yellow-400 transition-colors font-mono shadow-lg disabled:opacity-50"
-                >
-                  {loading ? 'VALIDATING...' : 'ACTIVATE ACCOUNT'}
-                </button>
-              </form>
-            )}
 
           </div>
 

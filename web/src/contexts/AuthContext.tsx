@@ -219,18 +219,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const result = await httpClient.post<{
+        token: string
         user_id: string
-        otp_secret: string
-        qr_code_url: string
+        email: string
         message: string
       }>('/api/register', requestBody)
 
       if (result.success && result.data) {
+        // 简化版注册：后端直接返回 token，无需 OTP 验证
+        // Reset 401 flag on successful registration
+        reset401Flag()
+
+        const userInfo = { id: result.data.user_id, email: result.data.email }
+        setToken(result.data.token)
+        setUser(userInfo)
+        localStorage.setItem('auth_token', result.data.token)
+        localStorage.setItem('auth_user', JSON.stringify(userInfo))
+
+        // 跳转到配置页面
+        const returnUrl = sessionStorage.getItem('returnUrl')
+        if (returnUrl) {
+          sessionStorage.removeItem('returnUrl')
+          window.history.pushState({}, '', returnUrl)
+          window.dispatchEvent(new PopStateEvent('popstate'))
+        } else {
+          window.history.pushState({}, '', '/traders')
+          window.dispatchEvent(new PopStateEvent('popstate'))
+        }
+
         return {
           success: true,
           userID: result.data.user_id,
-          otpSecret: result.data.otp_secret,
-          qrCodeURL: result.data.qr_code_url,
           message: result.message || result.data.message,
         }
       }

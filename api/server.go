@@ -2993,8 +2993,8 @@ func (s *Server) handleRegister(c *gin.Context) {
 	}
 
 	var req struct {
-		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required,min=6"`
+		Email    string `json:"email" binding:"required"`
+		Password string `json:"password" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -3003,29 +3003,33 @@ func (s *Server) handleRegister(c *gin.Context) {
 	}
 
 	// Check if email already exists (must check before maxUsers to allow incomplete OTP users)
-	existingUser, err := s.store.User().GetByEmail(req.Email)
-	if err == nil {
-		// User exists, check OTP verification status
-		if !existingUser.OTPVerified {
-			// OTP not verified, verify password first for security
-			if !auth.CheckPassword(req.Password, existingUser.PasswordHash) {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Email or password incorrect"})
-				return
-			}
-			// Password correct, allow user to continue OTP setup
-			// Return existing OTP information
-			qrCodeURL := auth.GetOTPQRCodeURL(existingUser.OTPSecret, req.Email)
-			c.JSON(http.StatusOK, gin.H{
-				"user_id":     existingUser.ID,
-				"email":       existingUser.Email,
-				"otp_secret":  existingUser.OTPSecret,
-				"qr_code_url": qrCodeURL,
-				"message":     "Incomplete registration detected, please continue OTP setup",
-			})
-			return
-		}
-		// OTP already verified, reject duplicate registration
-		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
+	// existingUser, err := s.store.User().GetByEmail(req.Email)
+	// if err == nil {
+	// 	// User exists, check OTP verification status
+	// 	if !existingUser.OTPVerified {
+	// 		// OTP not verified, verify password first for security
+	// 		if !auth.CheckPassword(req.Password, existingUser.PasswordHash) {
+	// 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Email or password incorrect"})
+	// 			return
+	// 		}
+	// 		// Password correct, allow user to continue OTP setup
+	// 		// Return existing OTP information
+	// 		qrCodeURL := auth.GetOTPQRCodeURL(existingUser.OTPSecret, req.Email)
+	// 		c.JSON(http.StatusOK, gin.H{
+	// 			"user_id":     existingUser.ID,
+	// 			"email":       existingUser.Email,
+	// 			"otp_secret":  existingUser.OTPSecret,
+	// 			"qr_code_url": qrCodeURL,
+	// 			"message":     "Incomplete registration detected, please continue OTP setup",
+	// 		})
+	// 		return
+	// 	}
+	// 	// OTP already verified, reject duplicate registration
+	// 	c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
+
+	// Check if username already exists
+	if err == nil && existingUser != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Username already registered"})
 		return
 	}
 
@@ -3051,20 +3055,19 @@ func (s *Server) handleRegister(c *gin.Context) {
 	}
 
 	// Generate OTP secret
-	otpSecret, err := auth.GenerateOTPSecret()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "OTP secret generation failed"})
-		return
-	}
-
-	// Create user (unverified OTP status)
+	// otpSecret, err := auth.GenerateOTPSecret()
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "OTP secret generation failed"})
+	// 	return
+	// }
+	// Create user (直接标记为已验证，跳过2FA)
 	userID := uuid.New().String()
 	user := &store.User{
 		ID:           userID,
 		Email:        req.Email,
 		PasswordHash: passwordHash,
-		OTPSecret:    otpSecret,
-		OTPVerified:  false,
+		OTPSecret:    "", // 不需要OTP
+		OTPVerified:  true, // 直接标记为已验证
 	}
 
 	err = s.store.User().Create(user)
@@ -3073,14 +3076,25 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	// Return OTP setup information
-	qrCodeURL := auth.GetOTPQRCodeURL(otpSecret, req.Email)
+	// 直接生成 JWT token
+	token, err := auth.GenerateJWT(userID, req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	// Initialize default model and exchange configs for user
+	err = s.initUserDefaultConfigs(userID)
+	if err != nil {
+		logger.Infof("Failed to initialize user default configs: %v", err)
+	}
+
+	// 直接返回 token，注册即登录
 	c.JSON(http.StatusOK, gin.H{
-		"user_id":     userID,
-		"email":       req.Email,
-		"otp_secret":  otpSecret,
-		"qr_code_url": qrCodeURL,
-		"message":     "Please scan the QR code with Google Authenticator and verify OTP",
+		"token":   token,
+		"user_id": userID,
+		"email":   req.Email,
+		"message": "Registration completed",
 	})
 }
 
@@ -3140,7 +3154,7 @@ func (s *Server) handleCompleteRegistration(c *gin.Context) {
 // handleLogin Handle user login request
 func (s *Server) handleLogin(c *gin.Context) {
 	var req struct {
-		Email    string `json:"email" binding:"required,email"`
+		Email    string `json:"email" binding:"required"`
 		Password string `json:"password" binding:"required"`
 	}
 
@@ -3152,37 +3166,28 @@ func (s *Server) handleLogin(c *gin.Context) {
 	// Get user information
 	user, err := s.store.User().GetByEmail(req.Email)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email or password incorrect"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Username or password incorrect"})
 		return
 	}
 
 	// Verify password
 	if !auth.CheckPassword(req.Password, user.PasswordHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email or password incorrect"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Username or password incorrect"})
 		return
 	}
 
-	// Check if OTP is verified
-	if !user.OTPVerified {
-		// Return OTP info so user can complete setup
-		qrCodeURL := auth.GetOTPQRCodeURL(user.OTPSecret, user.Email)
-		c.JSON(http.StatusOK, gin.H{
-			"user_id":            user.ID,
-			"email":              user.Email,
-			"otp_secret":         user.OTPSecret,
-			"qr_code_url":        qrCodeURL,
-			"requires_otp_setup": true,
-			"message":            "Please complete OTP setup first",
-		})
+	// 直接生成 JWT token，跳过 OTP 验证
+	token, err := auth.GenerateJWT(user.ID, user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	// Return status requiring OTP verification
 	c.JSON(http.StatusOK, gin.H{
-		"user_id":      user.ID,
-		"email":        user.Email,
-		"message":      "Please enter Google Authenticator code",
-		"requires_otp": true,
+		"token":   token,
+		"user_id": user.ID,
+		"email":   user.Email,
+		"message": "Login successful",
 	})
 }
 
