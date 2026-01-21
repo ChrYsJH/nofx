@@ -461,7 +461,7 @@ func (t *AsterTrader) doRequest(method, endpoint string, params map[string]inter
 	}
 }
 
-// GetBalance Get account balance
+// GetBalance 获取账户余额
 func (t *AsterTrader) GetBalance() (map[string]interface{}, error) {
 	params := make(map[string]interface{})
 	body, err := t.request("GET", "/fapi/v3/balance", params)
@@ -474,48 +474,67 @@ func (t *AsterTrader) GetBalance() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	// Find USDT balance
-	availableBalance := 0.0
-	crossUnPnl := 0.0
-	crossWalletBalance := 0.0
+	// 调试: 记录 API 返回的所有资产信息, 便于排查数据结构
+	logger.Infof("📊 Aster /fapi/v3/balance returned %d asset records:", len(balances))
+	for _, bal := range balances {
+		asset, _ := bal["asset"].(string)
+		balance, _ := bal["balance"].(string)
+		availBal, _ := bal["availableBalance"].(string)
+		crossWalBal, _ := bal["crossWalletBalance"].(string)
+		marginAvail, _ := bal["marginAvailable"].(bool)
+		logger.Infof("  💰 Asset: %s | balance: %s | availableBalance: %s | crossWalletBalance: %s | marginAvailable: %v",
+			asset, balance, availBal, crossWalBal, marginAvail)
+	}
+
+	usdtBalance := 0.0        // 纯 USDT 钱包余额
+	usdtAvailableBalance := 0.0 // USDT 可用余额
+	usdtCrossUnPnl := 0.0     // USDT 未实现盈亏
 	foundUSDT := false
 
 	for _, bal := range balances {
-		if asset, ok := bal["asset"].(string); ok && asset == "USDT" {
+		asset, ok := bal["asset"].(string)
+		if !ok {
+			continue
+		}
+
+		if asset == "USDT" {
 			foundUSDT = true
 
-			// Parse Aster fields (reference: https://github.com/asterdex/api-docs)
-			if avail, ok := bal["availableBalance"].(string); ok {
-				availableBalance, _ = strconv.ParseFloat(avail, 64)
+			// 使用 "balance" 字段 - 这是纯钱包余额, 不受多资产模式影响
+			if balStr, ok := bal["balance"].(string); ok {
+				usdtBalance, _ = strconv.ParseFloat(balStr, 64)
 			}
-			if unpnl, ok := bal["crossUnPnl"].(string); ok {
-				crossUnPnl, _ = strconv.ParseFloat(unpnl, 64)
+			// 同时获取可用余额作为参考
+			if availStr, ok := bal["availableBalance"].(string); ok {
+				usdtAvailableBalance, _ = strconv.ParseFloat(availStr, 64)
 			}
-			if cwb, ok := bal["crossWalletBalance"].(string); ok {
-				crossWalletBalance, _ = strconv.ParseFloat(cwb, 64)
+			// 获取未实现盈亏
+			if unpnlStr, ok := bal["crossUnPnl"].(string); ok {
+				usdtCrossUnPnl, _ = strconv.ParseFloat(unpnlStr, 64)
 			}
+
+			logger.Infof("✅ USDT balance found: balance=%f, availableBalance=%f, crossUnPnl=%f",
+				usdtBalance, usdtAvailableBalance, usdtCrossUnPnl)
 			break
 		}
 	}
 
 	if !foundUSDT {
-		logger.Infof("⚠️  USDT asset record not found!")
+		logger.Infof("⚠️  USDT asset record not found in balance response!")
 	}
 
 	// Get positions to calculate margin used and real unrealized PnL
 	positions, err := t.GetPositions()
 	if err != nil {
 		logger.Infof("⚠️  Failed to get position information: %v", err)
-		// fallback: use simple calculation when unable to get positions
 		return map[string]interface{}{
-			"totalWalletBalance":    crossWalletBalance,
-			"availableBalance":      availableBalance,
-			"totalUnrealizedProfit": crossUnPnl,
+			"totalWalletBalance":    usdtBalance,
+			"availableBalance":      usdtAvailableBalance,
+			"totalUnrealizedProfit": usdtCrossUnPnl,
 		}, nil
 	}
 
-	// ⚠️ Critical fix: accumulate real unrealized PnL from positions
-	// Aster's crossUnPnl field is inaccurate, need to recalculate from position data
+	// 从仓位计算未实现盈亏，避免受多资产模式影响
 	totalMarginUsed := 0.0
 	realUnrealizedPnl := 0.0
 	for _, pos := range positions {
@@ -535,17 +554,19 @@ func (t *AsterTrader) GetBalance() (map[string]interface{}, error) {
 		totalMarginUsed += marginUsed
 	}
 
-	// ✅ Aster correct calculation method:
-	// Total equity = available balance + margin used
-	// Wallet balance = total equity - unrealized PnL
-	// Unrealized PnL = calculated from accumulated positions (don't use API's crossUnPnl)
-	totalEquity := availableBalance + totalMarginUsed
-	totalWalletBalance := totalEquity - realUnrealizedPnl
+	// 直接使用 USDT balance 字段作为钱包余额
+	totalWalletBalance := usdtBalance
+
+	// 可用余额 = 钱包余额 + 未实现盈亏 - 已用保证金
+	calculatedAvailable := totalWalletBalance + realUnrealizedPnl - totalMarginUsed
+
+	logger.Infof("📈 Aster balance calculation: walletBalance=%.2f, unrealizedPnL=%.2f, marginUsed=%.2f, calculatedAvailable=%.2f, apiAvailable=%.2f",
+		totalWalletBalance, realUnrealizedPnl, totalMarginUsed, calculatedAvailable, usdtAvailableBalance)
 
 	return map[string]interface{}{
-		"totalWalletBalance":    totalWalletBalance, // Wallet balance (excluding unrealized PnL)
-		"availableBalance":      availableBalance,   // Available balance
-		"totalUnrealizedProfit": realUnrealizedPnl,  // Unrealized PnL (accumulated from positions)
+		"totalWalletBalance":    totalWalletBalance,   // 纯 USDT 钱包余额 (不含未实现盈亏)
+		"availableBalance":      calculatedAvailable,  // 计算得出的可用余额
+		"totalUnrealizedProfit": realUnrealizedPnl,    // 从仓位累计的未实现盈亏
 	}, nil
 }
 
