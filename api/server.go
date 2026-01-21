@@ -3003,7 +3003,7 @@ func (s *Server) handleRegister(c *gin.Context) {
 	}
 
 	// Check if email already exists (must check before maxUsers to allow incomplete OTP users)
-	// existingUser, err := s.store.User().GetByEmail(req.Email)
+	existingUser, err := s.store.User().GetByEmail(req.Email)
 	// if err == nil {
 	// 	// User exists, check OTP verification status
 	// 	if !existingUser.OTPVerified {
@@ -3027,7 +3027,6 @@ func (s *Server) handleRegister(c *gin.Context) {
 	// 	// OTP already verified, reject duplicate registration
 	// 	c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
 
-	// Check if username already exists
 	if err == nil && existingUser != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Username already registered"})
 		return
