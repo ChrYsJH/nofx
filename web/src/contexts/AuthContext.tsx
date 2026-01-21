@@ -123,7 +123,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await response.json()
 
       if (response.ok) {
-        // Check for OTP setup required (incomplete registration)
+        // 简化版登录：后端直接返回 token，无需 OTP 验证
+        if (data.token) {
+          // Reset 401 flag on successful login
+          reset401Flag()
+
+          const userInfo = { id: data.user_id, email: data.email }
+          setToken(data.token)
+          setUser(userInfo)
+          localStorage.setItem('auth_token', data.token)
+          localStorage.setItem('auth_user', JSON.stringify(userInfo))
+
+          // 跳转到配置页面
+          const returnUrl = sessionStorage.getItem('returnUrl')
+          if (returnUrl) {
+            sessionStorage.removeItem('returnUrl')
+            window.history.pushState({}, '', returnUrl)
+            window.dispatchEvent(new PopStateEvent('popstate'))
+          } else {
+            window.history.pushState({}, '', '/traders')
+            window.dispatchEvent(new PopStateEvent('popstate'))
+          }
+
+          return { success: true, message: data.message }
+        }
+        // 兼容旧的 OTP 流程（如果后端还有这样的返回）
         if (data.requires_otp_setup) {
           return {
             success: true,
