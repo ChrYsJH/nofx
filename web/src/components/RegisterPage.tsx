@@ -183,8 +183,6 @@ export function RegisterPage() {
           </h1>
           <p className="text-zinc-500 text-xs tracking-[0.2em] uppercase">
             {step === 'register' && 'Initializing Registration Sequence...'}
-            {step === 'setup-otp' && 'Configuring Security Protocols...'}
-            {step === 'verify-otp' && 'Finalizing Authentication...'}
           </p>
         </div>
 
